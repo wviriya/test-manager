@@ -1,18 +1,74 @@
-﻿@page "/counter"
+﻿@page "/upload"
+@using System 
+@using System.IO
+@using Microsoft.Extensions.Logging
+@using Azure.Storage
+@using Azure.Storage.Blobs
+@using Azure.Storage.Blobs.Models
+@inject ILogger<Error> Logger
 
-<PageTitle>Counter</PageTitle>
+<h3>Upload Files</h3>
 
-<h1>Counter</h1>
+<p>
+    <label>
+        Upload one file up to @maxFileSize bytes:
+        <InputFile OnChange="@LoadFiles" multiple />
+    </label>
+</p>
 
-<p role="status">Current count: @currentCount</p>
-
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+@if (isLoading)
+{
+    <p>Uploading...</p>
+}
+else
+{
+    <ul>
+        @foreach (var file in loadedFiles)
+        {
+            <li>
+                <ul>
+                    <li>Name: @file.Name</li>
+                    <li>Last modified: @file.LastModified.ToString()</li>
+                    <li>Size (bytes): @file.Size</li>
+                    <li>Content type: @file.ContentType</li>
+                </ul>
+            </li>
+        }
+    </ul>
+}
 
 @code {
-    private int currentCount = 0;
+    private List<IBrowserFile> loadedFiles = new();
+    private long maxFileSize = 1024 * 15;
+    private int maxAllowedFiles = 1;
+    private bool isLoading;
 
-    private void IncrementCount()
+    [CascadingParameter]
+    public Error? Error { get; set; }
+
+    private void LoadFiles(InputFileChangeEventArgs e)
     {
-        currentCount++;
+        isLoading = true;
+        loadedFiles.Clear();
+
+        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        {
+            try
+            {
+                loadedFiles.Add(file);
+
+                string connectionString = "connectionString";
+
+                BlobContainerClient container = new BlobContainerClient(connectionString, "dirtyfiles");
+
+                container.UploadBlobAsync(file.Name, file.OpenReadStream());
+            }
+            catch (Exception ex)
+            {
+                Error?.ProcessError(ex);
+            }
+        }
+
+        isLoading = false;
     }
 }
